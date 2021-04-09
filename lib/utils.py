@@ -33,7 +33,19 @@ def print_row(*row, colwidth=16):
     print("  ".join([format_val(x) for x in row]))
 
 def train_loop(forward, opt, steps, history_names=[], hook=None,
-    print_freq=1000, scheduler=None, quiet=False):
+    print_freq=1000, quiet=False, resume_step=None, lr_schedule=False):
+
+    if lr_schedule:
+        def lr_fn(step):
+            step = step + 1
+            lr = 0.5 + (0.5 * float(np.cos(np.pi * step / steps)))
+            if steps > 50000 and step <= 1000:
+                lr *= step / 1000.
+            return lr
+        scheduler = optim.lr_scheduler.LambdaLR(opt, lr_fn)
+    else:
+        scheduler = None
+
 
     if not quiet:
         print_row('step', 'step time', 'loss', *history_names)
@@ -41,6 +53,10 @@ def train_loop(forward, opt, steps, history_names=[], hook=None,
     scaler = torch.cuda.amp.GradScaler()
     start_time = time.time()
     for step in range(steps):
+
+        if step < (resume_step or -1):
+            scheduler.step()
+            continue
 
         opt.zero_grad(set_to_none=True)
         with torch.cuda.amp.autocast():
@@ -54,9 +70,6 @@ def train_loop(forward, opt, steps, history_names=[], hook=None,
         if scheduler is not None:
             scheduler.step()
 
-        if hook is not None:
-            hook(step)
-
         histories['loss'].append(forward_vals[0].item())
         for name, val in zip(history_names, forward_vals[1:]):
             histories[name].append(val.item())
@@ -69,7 +82,17 @@ def train_loop(forward, opt, steps, history_names=[], hook=None,
                     np.mean(histories['loss']),
                     *[np.mean(histories[name]) for name in history_names]
                 )
+            if hook is not None:
+                hook(step)
             histories.clear()
+
+        del forward_vals
+
+def all_params(*modules):
+    result = []
+    for m in modules:
+        result = result + list(m.parameters())
+    return result
 
 def save_image_grid(images, path):
     """
