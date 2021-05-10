@@ -1,3 +1,7 @@
+"""
+Trains two MNIST classifiers and finds corresponding hidden units.
+"""
+
 import argparse
 import lib.datasets
 import lib.ops

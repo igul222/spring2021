@@ -5,6 +5,7 @@ import matplotlib.pyplot as plt
 import time
 import torch
 from torch import optim
+import tqdm
 
 def print_model(model):
     print('Parameters:')
@@ -33,7 +34,8 @@ def print_row(*row, colwidth=16):
     print("  ".join([format_val(x) for x in row]))
 
 def train_loop(forward, opt, steps, history_names=[], hook=None,
-    print_freq=1000, quiet=False, resume_step=None, lr_schedule=False):
+    print_freq=1000, quiet=False, resume_step=None, lr_schedule=False,
+    hook_freq=1000):
 
     if lr_schedule:
         def lr_fn(step):
@@ -52,13 +54,15 @@ def train_loop(forward, opt, steps, history_names=[], hook=None,
     histories = collections.defaultdict(lambda: [])
     scaler = torch.cuda.amp.GradScaler()
     start_time = time.time()
-    for step in range(steps):
+    step_iterator = range(steps)
+    if quiet:
+        step_iterator = tqdm.tqdm(step_iterator, leave=False)
+    for step in step_iterator:
 
         if step < (resume_step or -1):
             scheduler.step()
             continue
 
-        opt.zero_grad(set_to_none=True)
         with torch.cuda.amp.autocast():
             forward_vals = forward()
             if not isinstance(forward_vals, tuple):
@@ -66,6 +70,7 @@ def train_loop(forward, opt, steps, history_names=[], hook=None,
         scaler.scale(forward_vals[0]).backward()
         scaler.step(opt)
         scaler.update()
+        opt.zero_grad(set_to_none=True)
 
         if scheduler is not None:
             scheduler.step()
@@ -74,7 +79,7 @@ def train_loop(forward, opt, steps, history_names=[], hook=None,
         for name, val in zip(history_names, forward_vals[1:]):
             histories[name].append(val.item())
 
-        if step % print_freq == 0:
+        if (step==0) or (step % print_freq == (print_freq - 1)):
             if not quiet:
                 print_row(
                     step,
@@ -82,9 +87,10 @@ def train_loop(forward, opt, steps, history_names=[], hook=None,
                     np.mean(histories['loss']),
                     *[np.mean(histories[name]) for name in history_names]
                 )
-            if hook is not None:
-                hook(step)
             histories.clear()
+
+        if step % hook_freq == (hook_freq - 1) and hook is not None:
+            hook(step)
 
         del forward_vals
 
@@ -135,3 +141,7 @@ def save_image_grid(images, path):
         i = n % n_cols
         grid_image[j*height:j*height+height, i*width:i*width+width] = image
     plt.imsave(path, grid_image)
+
+def infinite_iterator(iterator):
+    while True:
+        yield from iterator
