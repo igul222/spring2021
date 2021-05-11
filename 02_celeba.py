@@ -170,7 +170,9 @@ if __name__ == '__main__':
             'avg', 'worst')
         for i in range(args.n_hid):
             train_feats_transformed = (train_feats[0][:,i:i+1], train_feats[1])
-            all_test_feats_transformed = [(Z[:,i:i+1], Y)
-            for Z,Y in all_test_feats]
+            all_test_feats_transformed = [
+                (Z[:,i:i+1], Y)
+                for Z,Y in all_test_feats
+            ]
             lib.utils.print_row(i, *run_eval(train_feats_transformed,
                 all_test_feats_transformed, bias))
