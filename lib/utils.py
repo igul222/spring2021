@@ -65,7 +65,9 @@ def train_loop(forward, opt, steps, history_names=[], hook=None,
 
         with torch.cuda.amp.autocast():
             forward_vals = forward()
-            if not isinstance(forward_vals, tuple):
+            if not (isinstance(forward_vals, tuple) or 
+                isinstance(forward_vals, list)):
+
                 forward_vals = (forward_vals,)
         scaler.scale(forward_vals[0]).backward()
         scaler.step(opt)

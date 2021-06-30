@@ -1,5 +1,5 @@
 """
-CelebA classifier.
+Fully unsupervised semantic segmentation!
 """
 
 import argparse
